@@ -1,11 +1,13 @@
 use crate::config::UpmToolConfig;
 use crate::npm_registry::{Packument, RegistryVersion};
+use crate::package_json::{pin_dev_engine, unpin_dev_engine, version_candidates};
 use crate::upm::{
     at_or_above_floor, detect_node_version, name_reuse_floor, node_floor, sri_to_sha512_hex,
 };
 use extism_pdk::*;
 use proto_pdk::*;
 use starbase_utils::fs;
+use starbase_utils::json::{self, JsonValue};
 use std::path::PathBuf;
 
 const PACKAGE: &str = "upm";
@@ -46,6 +48,94 @@ pub fn detect_version_files(_: ()) -> FnResult<Json<DetectVersionOutput>> {
         files: vec!["package.json".into()],
         ignore: vec!["node_modules".into()],
     }))
+}
+
+#[plugin_fn]
+pub fn parse_version_file(
+    Json(input): Json<ParseVersionFileInput>,
+) -> FnResult<Json<ParseVersionFileOutput>> {
+    let mut output = ParseVersionFileOutput::default();
+
+    if input.file != "package.json" {
+        return Ok(Json(output));
+    }
+
+    let Ok(package_json) = json::parse::<JsonValue>(&input.content) else {
+        return Ok(Json(output));
+    };
+
+    let mut first_error = None;
+
+    for candidate in version_candidates(&package_json, &input.path)? {
+        match UnresolvedVersionSpec::parse(&candidate) {
+            Ok(version) => {
+                output.version = Some(version);
+                break;
+            }
+            Err(error) => {
+                first_error.get_or_insert(error);
+            }
+        }
+    }
+
+    if output.version.is_none()
+        && let Some(error) = first_error
+    {
+        return Err(plugin_err!("{error}"));
+    }
+
+    Ok(Json(output))
+}
+
+#[plugin_fn]
+pub fn pin_version(Json(input): Json<PinVersionInput>) -> FnResult<Json<PinVersionOutput>> {
+    let mut output = PinVersionOutput::default();
+    let file = input.dir.join("package.json");
+
+    let Some(mut package_json) = read_package_json(&file, &mut output.error)? else {
+        return Ok(Json(output));
+    };
+
+    pin_dev_engine(&mut package_json, &input.version.to_string());
+    json::write_file_with_config(&file, &package_json, true)?;
+
+    output.pinned = true;
+    output.file = Some(file);
+
+    Ok(Json(output))
+}
+
+#[plugin_fn]
+pub fn unpin_version(Json(input): Json<UnpinVersionInput>) -> FnResult<Json<UnpinVersionOutput>> {
+    let mut output = UnpinVersionOutput::default();
+    let file = input.dir.join("package.json");
+
+    let Some(mut package_json) = read_package_json(&file, &mut output.error)? else {
+        return Ok(Json(output));
+    };
+
+    if let Some(version) = unpin_dev_engine(&mut package_json) {
+        let version = UnresolvedVersionSpec::parse(&version)?;
+        json::write_file_with_config(&file, &package_json, true)?;
+
+        output.unpinned = true;
+        output.version = Some(version);
+        output.file = Some(file);
+    }
+
+    Ok(Json(output))
+}
+
+fn read_package_json(
+    file: &VirtualPath,
+    error: &mut Option<String>,
+) -> AnyResult<Option<JsonValue>> {
+    if !file.exists() {
+        *error = Some("No <file>package.json</file> exists in the target directory.".into());
+        return Ok(None);
+    }
+
+    Ok(Some(json::read_file(file)?))
 }
 
 #[plugin_fn]

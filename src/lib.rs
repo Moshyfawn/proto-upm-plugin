@@ -2,6 +2,8 @@ mod config;
 #[cfg(feature = "wasm")]
 mod npm_registry;
 #[cfg(feature = "wasm")]
+mod package_json;
+#[cfg(feature = "wasm")]
 mod proto;
 #[cfg(feature = "wasm")]
 mod upm;
