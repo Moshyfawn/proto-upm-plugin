@@ -8,7 +8,7 @@ pub struct RegistryVersion {
 
 #[derive(Deserialize)]
 pub struct Packument {
-    #[serde(rename = "dist-tags")]
+    #[serde(default, rename = "dist-tags")]
     pub dist_tags: FxHashMap<String, String>,
     pub versions: FxHashMap<String, RegistryVersion>,
 }

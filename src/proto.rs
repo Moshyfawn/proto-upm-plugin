@@ -82,6 +82,21 @@ pub fn download_prebuilt(
     Json(input): Json<DownloadPrebuiltInput>,
 ) -> FnResult<Json<DownloadPrebuiltOutput>> {
     let version = &input.context.version;
+
+    if version.is_canary() {
+        return Err(plugin_err!(PluginError::UnsupportedCanary {
+            tool: PACKAGE.into()
+        }));
+    }
+
+    // `proto run upm@1.0.0` skips list validation, so the floor is enforced here too.
+    if version.as_version().is_none_or(|v| *v < name_reuse_floor()) {
+        return Err(plugin_err!(
+            "<id>{PACKAGE}</id> <version>{version}</version> belongs to an unrelated package; versions start at <version>{}</version>.",
+            name_reuse_floor()
+        ));
+    }
+
     let config = get_tool_config::<UpmToolConfig>()?;
     let filename = format!("{PACKAGE}-{version}.tgz");
 
@@ -111,7 +126,6 @@ pub fn locate_executables(
     }))
 }
 
-// Wrappers are scripts, not real binaries, so they are never bin-linked.
 fn wrapper_config(path: PathBuf, primary: bool) -> ExecutableConfig {
     ExecutableConfig {
         exe_path: Some(path),
