@@ -3,7 +3,6 @@ use crate::npm_registry::{Packument, RegistryVersion};
 use crate::upm::{at_or_above_floor, name_reuse_floor, sri_to_sha512_hex};
 use extism_pdk::*;
 use proto_pdk::*;
-use rustc_hash::FxHashMap;
 use starbase_utils::fs;
 use std::path::PathBuf;
 
@@ -28,6 +27,13 @@ pub fn register_tool(Json(_): Json<RegisterToolInput>) -> FnResult<Json<Register
         plugin_version: Version::parse(env!("CARGO_PKG_VERSION")).ok(),
         requires: vec!["node".into()],
         ..Default::default()
+    }))
+}
+
+#[plugin_fn]
+pub fn define_tool_config(_: ()) -> FnResult<Json<DefineToolConfigOutput>> {
+    Ok(Json(DefineToolConfigOutput {
+        schema: schematic::SchemaBuilder::build_root::<UpmToolConfig>(),
     }))
 }
 
@@ -145,12 +151,20 @@ pub fn locate_executables(
     Json(input): Json<LocateExecutablesInput>,
 ) -> FnResult<Json<LocateExecutablesOutput>> {
     let env = get_host_environment()?;
-    let upm = write_wrapper(env, &input.install_dir, "shims", "upm")?;
+    let config = get_tool_config::<UpmToolConfig>()?;
+    let mut output = LocateExecutablesOutput::default();
 
-    Ok(Json(LocateExecutablesOutput {
-        exes: FxHashMap::from_iter([("upm".to_string(), wrapper_config(upm, true))]),
-        ..Default::default()
-    }))
+    let upm = write_wrapper(env, &input.install_dir, "shims", "upm")?;
+    output.exes.insert("upm".into(), wrapper_config(upm, true));
+
+    // upx gets its own dir so `proto activate` only sees it when enabled.
+    if config.upx_shim {
+        let upx = write_wrapper(env, &input.install_dir, "upx", "upx")?;
+        output.exes_dirs.push(upx.parent().unwrap().to_path_buf());
+        output.exes.insert("upx".into(), wrapper_config(upx, false));
+    }
+
+    Ok(Json(output))
 }
 
 fn wrapper_config(path: PathBuf, primary: bool) -> ExecutableConfig {

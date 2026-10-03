@@ -5888,6 +5888,7 @@ dependencies = [
  "proto_pdk_test_utils",
  "reqwest",
  "rustc-hash",
+ "schematic",
  "serde",
  "serde_json",
  "starbase_utils",
