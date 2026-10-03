@@ -27,6 +27,8 @@ cd "$workdir"
 proto plugin add upm "$locator" --to global
 proto install upm --pin global
 
-version="$(upm --version)"
-echo "upm --version: $version"
-[[ -n "$version" ]] || { echo "upm --version printed nothing" >&2; exit 1; }
+for bin in upm upx; do
+  version="$("$bin" --version)"
+  echo "$bin --version: $version"
+  [[ -n "$version" ]] || { echo "$bin --version printed nothing" >&2; exit 1; }
+done
