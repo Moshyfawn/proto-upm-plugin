@@ -1,6 +1,8 @@
 use crate::config::UpmToolConfig;
 use crate::npm_registry::{Packument, RegistryVersion};
-use crate::upm::{at_or_above_floor, name_reuse_floor, sri_to_sha512_hex};
+use crate::upm::{
+    at_or_above_floor, detect_node_version, name_reuse_floor, node_floor, sri_to_sha512_hex,
+};
 use extism_pdk::*;
 use proto_pdk::*;
 use starbase_utils::fs;
@@ -12,6 +14,7 @@ const CMD_WRAPPER_TEMPLATE: &str = include_str!("../templates/cmd-wrapper.cmd");
 
 #[host_fn]
 extern "ExtismHost" {
+    fn host_log(input: Json<HostLogInput>);
     fn send_request(input: Json<SendRequestInput>) -> Json<SendRequestOutput>;
 }
 
@@ -204,4 +207,19 @@ fn write_wrapper(
     )?;
 
     Ok(path)
+}
+
+#[plugin_fn]
+pub fn post_install(Json(_): Json<InstallHook>) -> FnResult<()> {
+    if let Some(version) = detect_node_version()
+        && version < node_floor()
+    {
+        host_log!(
+            warn,
+            "upm requires Node.js {} or newer, but found {version}. On older versions upm exits without printing anything.",
+            node_floor()
+        );
+    }
+
+    Ok(())
 }
