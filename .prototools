@@ -1,0 +1,5 @@
+proto = "0.62.3"
+node = "24.18.0"
+
+[plugins.tools]
+upm = "file://./target/wasm32-wasip1/release/upm_tool.wasm"

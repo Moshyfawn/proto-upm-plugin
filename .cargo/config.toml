@@ -1,0 +1,10 @@
+[alias]
+wasm = "build --release --target wasm32-wasip1"
+t = "test --no-default-features"
+lint = "clippy --release --target wasm32-wasip1 -- -D warnings"
+
+[unstable]
+build-std = ["std", "panic_abort"]
+
+[target.wasm32-wasip1]
+rustflags = ["-Zunstable-options", "-Cpanic=immediate-abort"]
