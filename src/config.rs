@@ -15,3 +15,9 @@ impl Default for UpmToolConfig {
         }
     }
 }
+
+impl UpmToolConfig {
+    pub fn registry_url(&self) -> &str {
+        self.registry_url.trim_end_matches('/')
+    }
+}

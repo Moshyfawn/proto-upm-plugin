@@ -1,6 +1,6 @@
 use crate::config::UpmToolConfig;
-use crate::npm_registry::Packument;
-use crate::upm::{at_or_above_floor, name_reuse_floor};
+use crate::npm_registry::{Packument, RegistryVersion};
+use crate::upm::{at_or_above_floor, name_reuse_floor, sri_to_sha512_hex};
 use extism_pdk::*;
 use proto_pdk::*;
 use rustc_hash::FxHashMap;
@@ -43,9 +43,7 @@ pub fn detect_version_files(_: ()) -> FnResult<Json<DetectVersionOutput>> {
 pub fn load_versions(Json(_): Json<LoadVersionsInput>) -> FnResult<Json<LoadVersionsOutput>> {
     let mut output = LoadVersionsOutput::default();
     let config = get_tool_config::<UpmToolConfig>()?;
-    let registry_url = config.registry_url.trim_end_matches('/');
-
-    let packument: Packument = fetch_json(format!("{registry_url}/{PACKAGE}/"))?;
+    let packument = fetch_packument(config.registry_url())?;
 
     for item in packument.versions.values() {
         if at_or_above_floor(&item.version) {
@@ -98,19 +96,48 @@ pub fn download_prebuilt(
     }
 
     let config = get_tool_config::<UpmToolConfig>()?;
+    let registry_url = config.registry_url();
+    let version = version.to_string();
     let filename = format!("{PACKAGE}-{version}.tgz");
+    let integrity = fetch_integrity(registry_url, &version)?;
 
     Ok(Json(DownloadPrebuiltOutput {
         archive_prefix: Some("package".into()),
+        checksum: Some(Checksum::sha512(sri_to_sha512_hex(&integrity)?)),
         download_url: config
             .dist_url
-            .replace("{registry}", config.registry_url.trim_end_matches('/'))
+            .replace("{registry}", registry_url)
             .replace("{package}", PACKAGE)
             .replace("{package_without_scope}", PACKAGE)
-            .replace("{version}", &version.to_string())
+            .replace("{version}", &version)
             .replace("{file}", &filename),
         ..Default::default()
     }))
+}
+
+fn fetch_packument(registry_url: &str) -> AnyResult<Packument> {
+    fetch_json(format!("{registry_url}/{PACKAGE}/"))
+}
+
+fn fetch_integrity(registry_url: &str, version: &str) -> AnyResult<String> {
+    let url = format!("{registry_url}/{PACKAGE}/{version}");
+    let response = send_request!(&url);
+
+    let document: RegistryVersion = match response.status {
+        // Some mirrors only serve the packument.
+        404 => fetch_packument(registry_url)?
+            .versions
+            .remove(version)
+            .ok_or_else(|| {
+                anyhow!("<id>{PACKAGE}</id> <version>{version}</version> is not in the registry.")
+            })?,
+        200..300 => response.json()?,
+        status => return Err(anyhow!("Failed to request <url>{url}</url> ({status})")),
+    };
+
+    document.dist.integrity.ok_or_else(|| {
+        anyhow!("The registry has no integrity hash for <id>{PACKAGE}</id> <version>{version}</version>.")
+    })
 }
 
 #[plugin_fn]
