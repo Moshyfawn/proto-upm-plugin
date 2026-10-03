@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Real proto CLI in a throwaway PROTO_HOME; run `cargo wasm` first.
 set -euo pipefail
 
 repo="$(cd "$(dirname "$0")/.." && pwd)"
