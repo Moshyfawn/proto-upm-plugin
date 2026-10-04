@@ -9,7 +9,7 @@ wasm="$repo/target/wasm32-wasip1/release/upm_tool.wasm"
 if [[ "${OS:-}" == "Windows_NT" ]]; then
   export PROTO_HOME="$(cygpath -m "${RUNNER_TEMP:-$TEMP}")/proto-upm-e2e.$$"
   export PATH="$(cygpath -u "$PROTO_HOME")/shims:$(cygpath -u "$PROTO_HOME")/bin:$PATH"
-  locator="file:///$(cygpath -m "$wasm")"
+  locator="file://$(cygpath -m "$wasm")"
 else
   export PROTO_HOME="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/proto-upm-e2e.$$"
   export PATH="$PROTO_HOME/shims:$PROTO_HOME/bin:$PATH"
